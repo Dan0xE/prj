@@ -71,10 +71,10 @@ impl Config {
     }
 
     pub fn write_config(&self) -> Result<(), WriteError> {
-        let output = toml::to_vec(self).or(Err(WriteError::SerializeError))?;
+        let output = toml::to_string(self).or(Err(WriteError::SerializeError))?;
         let mut f = File::create(&self.location)?;
 
-        f.write_all(&output)?;
+        f.write_all(output.as_bytes())?;
         Ok(())
     }
 }

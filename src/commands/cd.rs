@@ -4,7 +4,7 @@ use crate::discovery::git::fetch_vcs_info;
 use crate::discovery::traverse::Traverser;
 use crossterm::{
     cursor,
-    event::{poll, read, Event, KeyCode},
+    event::{poll, read, Event, KeyCode, KeyEventKind},
     execute, queue,
     style::{Color, Print, SetBackgroundColor, SetForegroundColor},
     terminal,
@@ -43,7 +43,7 @@ pub enum CommandError {
     #[error("no project selected")]
     NothingSelected,
     #[error("failed to render")]
-    RenderError(#[from] crossterm::ErrorKind),
+    RenderError(#[from] std::io::Error),
 }
 
 impl UiState {
@@ -117,7 +117,7 @@ fn truncate_beginning(s: &str, max_len: usize) -> String {
     s.to_string()
 }
 
-fn render(query: &str, state: &UiState, cache: &CacheClient) -> crossterm::Result<()> {
+fn render(query: &str, state: &UiState, cache: &CacheClient) -> std::io::Result<()> {
     let mut stderr = BufWriter::with_capacity(1 << 16, stderr());
 
     queue!(stderr, terminal::Clear(terminal::ClearType::All))?;
@@ -322,7 +322,7 @@ pub fn run(config: &Config) -> Result<(), CommandError> {
             let read_result = read();
 
             match read_result.unwrap() {
-                Event::Key(event) => match event.code {
+                Event::Key(event) if event.kind == KeyEventKind::Press => match event.code {
                     KeyCode::Char(c) => ui_state.add_char(c),
                     KeyCode::Backspace => ui_state.remove_char(),
                     KeyCode::Down => ui_state.select_prev(),

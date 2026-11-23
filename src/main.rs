@@ -2,18 +2,18 @@ mod commands;
 mod config;
 mod discovery;
 
-use clap::{App, SubCommand};
+use clap::Command;
 use config::Config;
 use std::process::exit;
 
 fn main() {
-    let matches = App::new("prj")
+    let mut app = Command::new("prj")
         .version("0.1.0")
         .author("Jordan West")
         .about("Manage your local git projects")
-        .subcommand(SubCommand::with_name("configure").about("Create a configuration"))
-        .subcommand(SubCommand::with_name("list").about("Select a project"))
-        .get_matches();
+        .subcommand(Command::new("configure").about("Create a configuration"))
+        .subcommand(Command::new("list").about("Select a project"));
+    let matches = app.get_matches_mut();
 
     if let Some(_) = matches.subcommand_matches("configure") {
         commands::configure::configure().unwrap();
@@ -24,7 +24,7 @@ fn main() {
             exit(1);
         }
     } else {
-        println!("{}", matches.usage());
+        println!("{}", app.render_usage());
         exit(1)
     }
 }
