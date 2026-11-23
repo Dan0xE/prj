@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 pub struct VcsInfo {
     pub last_commit_summary: String,
     pub current_branch_name: String,
-    pub uncommitted_changes: usize,
+    pub uncommitted_changes: Option<usize>,
 }
 
 #[derive(Debug, Clone)]

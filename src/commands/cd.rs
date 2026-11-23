@@ -9,6 +9,7 @@ use crossterm::{
     style::{Color, Print, SetBackgroundColor, SetForegroundColor},
     terminal,
 };
+use git2::{Repository, StatusOptions};
 use nucleo_matcher::pattern::{CaseMatching, Normalization, Pattern};
 use nucleo_matcher::{Matcher, Utf32Str};
 use std::cmp::Ord;
@@ -144,7 +145,7 @@ fn render(query: &str, state: &UiState, cache: &CacheClient) -> std::io::Result<
         let vcs_info = cache.get_vcs_info(&result.path);
 
         let has_pending_changes = match &vcs_info {
-            Some(vcs_info) if vcs_info.uncommitted_changes > 0 => true,
+            Some(vcs_info) if vcs_info.uncommitted_changes.unwrap_or(0) > 0 => true,
             _ => false,
         };
 
@@ -191,9 +192,10 @@ fn render(query: &str, state: &UiState, cache: &CacheClient) -> std::io::Result<
             let vcs_summary = match state.vcs_display {
                 VcsDisplay::BranchName => vcs_info.current_branch_name.clone(),
                 VcsDisplay::LastCommit => vcs_info.last_commit_summary.clone(),
-                VcsDisplay::ChangeCount => {
-                    format!("{} pending changes", vcs_info.uncommitted_changes)
-                }
+                VcsDisplay::ChangeCount => match vcs_info.uncommitted_changes {
+                    Some(count) => format!("{} pending changes", count),
+                    None => "counting...".to_string(),
+                },
             };
 
             queue!(
@@ -280,6 +282,23 @@ pub fn run(config: &Config) -> Result<(), CommandError> {
 
                 // TODO: Record a failure to read git info for this project
                 Err(_) => (),
+            }
+        }
+
+        for p in cache2.get_projects() {
+            if let Some(mut vcs_info) = cache2.get_vcs_info(&p.path) {
+                let count = Repository::open(&p.path).and_then(|repo| {
+                    repo.statuses(Some(
+                        StatusOptions::new()
+                            .include_ignored(false)
+                            .include_untracked(true),
+                    ))
+                    .map(|statuses| statuses.len())
+                });
+                if let Ok(count) = count {
+                    vcs_info.uncommitted_changes = Some(count);
+                    cache2.add_vcs_info(&p.path, vcs_info);
+                }
             }
         }
     });
