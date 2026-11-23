@@ -32,10 +32,11 @@ pub fn fetch_vcs_info(path: &Path) -> Result<VcsInfo, GitError> {
             .peel_to_commit()
             .or(Err(FailedToReadHead))?
             .summary()
+            .or(Err(FailedToReadHead))?
             .ok_or(FailedToReadHead)?
             .to_string(),
 
-        current_branch_name: head.shorthand().ok_or(FailedToReadHead)?.to_string(),
+        current_branch_name: head.shorthand().or(Err(FailedToReadHead))?.to_string(),
 
         uncommitted_changes: statuses.len(),
     };
