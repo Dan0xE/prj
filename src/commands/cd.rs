@@ -12,7 +12,7 @@ use crossterm::{
 use fuzzy_matcher::skim::SkimMatcherV2;
 use fuzzy_matcher::FuzzyMatcher;
 use std::cmp::Ord;
-use std::io::{stderr, Write};
+use std::io::{stderr, BufWriter, Write};
 use std::path::PathBuf;
 use std::thread;
 use std::time::Duration;
@@ -118,9 +118,9 @@ fn truncate_beginning(s: &str, max_len: usize) -> String {
 }
 
 fn render(query: &str, state: &UiState, cache: &CacheClient) -> crossterm::Result<()> {
-    let mut stderr = stderr();
+    let mut stderr = BufWriter::with_capacity(1 << 16, stderr());
 
-    execute!(stderr, terminal::Clear(terminal::ClearType::All))?;
+    queue!(stderr, terminal::Clear(terminal::ClearType::All))?;
 
     let (cols, rows) = dimensions_stderr().unwrap();
     let rows = rows as u16;
