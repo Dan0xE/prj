@@ -9,8 +9,8 @@ use crossterm::{
     style::{Color, Print, SetBackgroundColor, SetForegroundColor},
     terminal,
 };
-use fuzzy_matcher::skim::SkimMatcherV2;
-use fuzzy_matcher::FuzzyMatcher;
+use nucleo_matcher::pattern::{CaseMatching, Normalization, Pattern};
+use nucleo_matcher::{Matcher, Utf32Str};
 use std::cmp::Ord;
 use std::io::{stderr, BufWriter, Write};
 use std::path::PathBuf;
@@ -22,7 +22,7 @@ use thiserror::Error;
 #[derive(Debug)]
 struct MatchResult {
     path: PathBuf,
-    score: i64,
+    score: u32,
 }
 
 enum VcsDisplay {
@@ -259,7 +259,7 @@ fn render(query: &str, state: &UiState, cache: &CacheClient) -> std::io::Result<
 }
 
 pub fn run(config: &Config) -> Result<(), CommandError> {
-    let matcher = SkimMatcherV2::default();
+    let mut matcher = Matcher::new(nucleo_matcher::Config::DEFAULT.match_paths());
 
     let cache = Cache::new();
 
@@ -296,8 +296,11 @@ pub fn run(config: &Config) -> Result<(), CommandError> {
     execute!(stderr(), terminal::EnterAlternateScreen)?;
     while !exit {
         ui_state.results = Vec::new();
+        let pattern = Pattern::parse(&ui_state.query, CaseMatching::Smart, Normalization::Smart);
+        let mut buf = Vec::new();
         for proj in cache.get_projects() {
-            let match_score = matcher.fuzzy_match(proj.path.to_str().unwrap(), &ui_state.query);
+            let haystack = Utf32Str::new(proj.path.to_str().unwrap(), &mut buf);
+            let match_score = pattern.score(haystack, &mut matcher);
             if let Some(score) = match_score {
                 ui_state.results.push(MatchResult {
                     score,
