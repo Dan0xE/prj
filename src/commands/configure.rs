@@ -2,14 +2,20 @@ use crate::config::{Config, WriteError};
 use dirs::home_dir;
 use std::io;
 use std::path::PathBuf;
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ConfigureError {
+    #[error("home directory not found")]
     HomeDirNotFound,
+    #[error("path is not valid UTF-8")]
     PathNotParsable,
+    #[error("failed to read input")]
     EndOfInput,
+    #[error("cancelled by user")]
     UserCancelled,
-    WriteError(WriteError),
+    #[error("failed to write config")]
+    WriteError(#[from] WriteError),
 }
 
 fn ask(prompt: &str, default: &str) -> Result<String, ConfigureError> {
@@ -66,7 +72,6 @@ pub fn configure() -> Result<(), ConfigureError> {
     let root = PathBuf::from(root);
     let config = Config { root, location };
 
-    config
-        .write_config()
-        .or_else(|e| Err(ConfigureError::WriteError(e)))
+    config.write_config()?;
+    Ok(())
 }

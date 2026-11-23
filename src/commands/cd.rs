@@ -17,6 +17,7 @@ use std::path::PathBuf;
 use std::thread;
 use std::time::Duration;
 use term_size::dimensions_stderr;
+use thiserror::Error;
 
 #[derive(Debug)]
 struct MatchResult {
@@ -37,9 +38,12 @@ struct UiState {
     vcs_display: VcsDisplay,
 }
 
+#[derive(Debug, Error)]
 pub enum CommandError {
+    #[error("no project selected")]
     NothingSelected,
-    RenderError(crossterm::ErrorKind),
+    #[error("failed to render")]
+    RenderError(#[from] crossterm::ErrorKind),
 }
 
 impl UiState {
@@ -289,8 +293,7 @@ pub fn run(config: &Config) -> Result<(), CommandError> {
     };
     let mut selected_project = None;
 
-    execute!(stderr(), terminal::EnterAlternateScreen)
-        .or_else(|e| Err(CommandError::RenderError(e)))?;
+    execute!(stderr(), terminal::EnterAlternateScreen)?;
     while !exit {
         ui_state.results = Vec::new();
         for proj in cache.get_projects() {
@@ -305,16 +308,15 @@ pub fn run(config: &Config) -> Result<(), CommandError> {
 
         ui_state.results.sort_by(|a, b| b.score.cmp(&a.score));
 
-        render(&ui_state.query, &ui_state, &cache)
-            .or_else(|e| Err(CommandError::RenderError(e)))?;
+        render(&ui_state.query, &ui_state, &cache)?;
 
-        terminal::enable_raw_mode().or_else(|e| Err(CommandError::RenderError(e)))?;
+        terminal::enable_raw_mode()?;
 
         let mut input_available: bool = false;
         while !input_available && !cache.has_new_data() {
             input_available = poll(Duration::from_millis(50)).unwrap();
         }
-        terminal::disable_raw_mode().or_else(|e| Err(CommandError::RenderError(e)))?;
+        terminal::disable_raw_mode()?;
 
         if input_available {
             let read_result = read();
@@ -338,8 +340,7 @@ pub fn run(config: &Config) -> Result<(), CommandError> {
             };
         }
     }
-    execute!(stderr(), terminal::LeaveAlternateScreen)
-        .or_else(|e| Err(CommandError::RenderError(e)))?;
+    execute!(stderr(), terminal::LeaveAlternateScreen)?;
 
     if let Some(path) = selected_project {
         println!("{}", path.to_str().unwrap());

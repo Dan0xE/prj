@@ -1,14 +1,18 @@
 use std::path::{Path, PathBuf};
+use thiserror::Error;
 
 pub struct Traverser {
     queue: Vec<(PathBuf, u8)>,
     max_nesting: u8,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum TraverseError {
+    #[error("failed to read directory")]
     FailedToReadDir,
+    #[error("file name is not valid UTF-8")]
     InvalidFilename,
+    #[error("no more directories to search")]
     Finished,
 }
 

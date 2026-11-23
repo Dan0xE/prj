@@ -4,6 +4,7 @@ use std::fs::File;
 use std::io::prelude::*;
 use std::path::Path;
 use std::path::PathBuf;
+use thiserror::Error;
 
 #[derive(Debug, Deserialize, Serialize)]
 pub struct Config {
@@ -16,17 +17,23 @@ pub struct Config {
 
 use toml;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum ReadError {
+    #[error("config file not found")]
     Missing,
+    #[error("failed to read config file")]
     IoError,
+    #[error("home directory not found")]
     HomeDirNotFound,
+    #[error("failed to parse config file")]
     ParseError,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum WriteError {
-    IoError(std::io::Error),
+    #[error("failed to write config file")]
+    IoError(#[from] std::io::Error),
+    #[error("failed to serialize config")]
     SerializeError,
 }
 
@@ -65,9 +72,9 @@ impl Config {
 
     pub fn write_config(&self) -> Result<(), WriteError> {
         let output = toml::to_vec(self).or(Err(WriteError::SerializeError))?;
-        let mut f = File::create(&self.location).or_else(|e| Err(WriteError::IoError(e)))?;
+        let mut f = File::create(&self.location)?;
 
-        f.write_all(&output)
-            .or_else(|e| Err(WriteError::IoError(e)))
+        f.write_all(&output)?;
+        Ok(())
     }
 }

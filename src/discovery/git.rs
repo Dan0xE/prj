@@ -1,11 +1,15 @@
 use super::cache::VcsInfo;
 use git2::{Repository, StatusOptions};
 use std::path::Path;
+use thiserror::Error;
 
-#[derive(Debug)]
+#[derive(Debug, Error)]
 pub enum GitError {
+    #[error("failed to open repository")]
     FailedToOpen,
+    #[error("failed to read HEAD")]
     FailedToReadHead,
+    #[error("failed to read repository status")]
     FailedToReadStatus,
 }
 
