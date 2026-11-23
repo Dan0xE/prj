@@ -14,14 +14,7 @@ pub struct Project {
     pub path: PathBuf,
 }
 
-#[derive(Debug)]
-pub struct Remote {
-    pub name: String,
-    pub path: PathBuf,
-}
-
 pub struct Cache {
-    pub remotes: HashMap<PathBuf, Remote>,
     pub projects: HashMap<PathBuf, Project>,
     pub vcs_info: HashMap<PathBuf, VcsInfo>,
     update_count: i32,
@@ -30,7 +23,6 @@ pub struct Cache {
 impl Cache {
     pub fn new() -> Cache {
         Cache {
-            remotes: HashMap::new(),
             projects: HashMap::new(),
             vcs_info: HashMap::new(),
             update_count: 0,
@@ -59,25 +51,25 @@ impl CacheClient {
     pub fn get_projects(&self) -> Vec<Project> {
         let cache = self.cache.lock().unwrap();
 
-        (*cache).projects.values().cloned().collect()
+        cache.projects.values().cloned().collect()
     }
 
     pub fn get_vcs_info(&self, path: &Path) -> std::option::Option<VcsInfo> {
         let cache = self.cache.lock().unwrap();
 
-        (*cache).vcs_info.get(path).map(|v| v.clone())
+        cache.vcs_info.get(path).cloned()
     }
 
     pub fn add_vcs_info(&mut self, path: &Path, val: VcsInfo) {
         let mut cache = self.cache.lock().unwrap();
         cache.update_count += 1;
-        (*cache).vcs_info.insert(path.to_path_buf(), val);
+        cache.vcs_info.insert(path.to_path_buf(), val);
     }
 
     pub fn add_project(&mut self, path: PathBuf) {
         let mut cache = self.cache.lock().unwrap();
         cache.update_count += 1;
-        (*cache)
+        cache
             .projects
             .insert(path.to_path_buf(), Project { path });
     }

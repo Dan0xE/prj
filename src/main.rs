@@ -15,12 +15,12 @@ fn main() {
         .subcommand(Command::new("list").about("Select a project"));
     let matches = app.get_matches_mut();
 
-    if let Some(_) = matches.subcommand_matches("configure") {
+    if matches.subcommand_matches("configure").is_some() {
         commands::configure::configure().unwrap();
-    } else if let Some(_) = matches.subcommand_matches("list") {
+    } else if matches.subcommand_matches("list").is_some() {
         let config = Config::autoload().unwrap();
 
-        if let Err(_) = commands::cd::run(&config) {
+        if commands::cd::run(&config).is_err() {
             exit(1);
         }
     } else {

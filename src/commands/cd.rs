@@ -12,7 +12,7 @@ use crossterm::{
 use git2::{Repository, StatusOptions};
 use nucleo_matcher::pattern::{CaseMatching, Normalization, Pattern};
 use nucleo_matcher::{Matcher, Utf32Str};
-use std::cmp::Ord;
+use std::cmp::Reverse;
 use std::io::{stderr, BufWriter, Write};
 use std::path::PathBuf;
 use std::thread;
@@ -130,11 +130,7 @@ fn render(query: &str, state: &UiState, cache: &CacheClient) -> std::io::Result<
     let result_row_count = (rows - 4) as usize;
     let summary_col = (cols / 10) * 6;
 
-    let first_result = if state.selected_index > result_row_count {
-        state.selected_index - result_row_count
-    } else {
-        0
-    };
+    let first_result = state.selected_index.saturating_sub(result_row_count);
 
     for (i, result) in state.results.iter().enumerate() {
         if i < first_result {
@@ -144,10 +140,8 @@ fn render(query: &str, state: &UiState, cache: &CacheClient) -> std::io::Result<
         let is_selected = i == state.selected_index;
         let vcs_info = cache.get_vcs_info(&result.path);
 
-        let has_pending_changes = match &vcs_info {
-            Some(vcs_info) if vcs_info.uncommitted_changes.unwrap_or(0) > 0 => true,
-            _ => false,
-        };
+        let has_pending_changes =
+            matches!(&vcs_info, Some(vcs_info) if vcs_info.uncommitted_changes.unwrap_or(0) > 0);
 
         if is_selected {
             queue!(
@@ -232,8 +226,8 @@ fn render(query: &str, state: &UiState, cache: &CacheClient) -> std::io::Result<
             "{:width_a$}{:width_b$}",
             "  Project",
             format!("{}   <TAB>", vcs_title),
-            width_a = summary_col as usize,
-            width_b = cols - summary_col as usize,
+            width_a = { summary_col },
+            width_b = cols - summary_col,
         )),
         SetBackgroundColor(Color::Reset),
         SetForegroundColor(Color::Reset)
@@ -275,13 +269,9 @@ pub fn run(config: &Config) -> Result<(), CommandError> {
         }
 
         for p in cache2.get_projects() {
-            match fetch_vcs_info(&p.path) {
-                Ok(vcs_info) => {
-                    cache2.add_vcs_info(&p.path, vcs_info);
-                }
-
-                // TODO: Record a failure to read git info for this project
-                Err(_) => (),
+            // TODO: Record a failure to read git info for this project
+            if let Ok(vcs_info) = fetch_vcs_info(&p.path) {
+                cache2.add_vcs_info(&p.path, vcs_info);
             }
         }
 
@@ -328,7 +318,7 @@ pub fn run(config: &Config) -> Result<(), CommandError> {
             }
         }
 
-        ui_state.results.sort_by(|a, b| b.score.cmp(&a.score));
+        ui_state.results.sort_by_key(|result| Reverse(result.score));
 
         render(&ui_state.query, &ui_state, &cache)?;
 
@@ -369,5 +359,5 @@ pub fn run(config: &Config) -> Result<(), CommandError> {
         return Ok(());
     }
 
-    return Err(CommandError::NothingSelected);
+    Err(CommandError::NothingSelected)
 }

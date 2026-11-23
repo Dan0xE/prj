@@ -15,7 +15,6 @@ pub struct Config {
     pub root: PathBuf,
 }
 
-use toml;
 
 #[derive(Debug, Error)]
 pub enum ReadError {

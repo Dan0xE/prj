@@ -30,7 +30,7 @@ fn ask(prompt: &str, default: &str) -> Result<String, ConfigureError> {
 
     let result = raw_result.trim();
 
-    if result.len() == 0 {
+    if result.is_empty() {
         return Ok(default.to_string());
     }
     Ok(result.to_string())
@@ -40,7 +40,7 @@ pub fn configure() -> Result<(), ConfigureError> {
     let home_dir = home_dir().ok_or(ConfigureError::HomeDirNotFound)?;
 
     let existing_config = Config::autoload().ok();
-    if let Some(_) = existing_config {
+    if existing_config.is_some() {
         let overwrite = ask(
             "I found an existing config file, do you want to overwrite it?",
             "N",
