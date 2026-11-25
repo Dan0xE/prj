@@ -17,6 +17,8 @@ use std::cmp::Reverse;
 use std::collections::HashSet;
 use std::io::{stderr, BufWriter, Write};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use term_size::dimensions_stderr;
@@ -277,43 +279,53 @@ pub fn run(config: &Config) -> Result<(), CommandError> {
             }
         }
 
-        for p in cache2.get_projects() {
-            if let Some(mut vcs_info) = cache2.get_vcs_info(&p.path) {
-                let count = gix::open(&p.path).ok().and_then(|repo| {
-                    let index = repo.index_or_empty().ok()?;
-                    let changes = repo
-                        .status(gix::progress::Discard)
-                        .ok()?
-                        .into_iter(Vec::new())
-                        .ok()?;
+        let projects = Arc::new(cache2.get_projects());
+        let next_project = Arc::new(AtomicUsize::new(0));
 
-                    // // NOTE: to count paths like `git status` would, we count a file with
-                    // both staged and unstaged changes **once**, and we also collapse untracked
-                    // files into their topmost untracked directory
-                    let paths: HashSet<_> = changes
-                        .filter_map(Result::ok)
-                        .map(|change| match change {
-                            IndexWorktree(DirectoryContents { entry, .. }) => {
-                                let path = entry.rela_path;
-                                let dir_end = path.find_iter("/").find(|&i| {
-                                    index.prefixed_entries(path[..=i].as_bstr()).is_none()
-                                });
-                                match dir_end {
-                                    Some(i) => path[..i].into(),
-                                    None => path,
-                                }
-                            }
-                            change => change.location().to_owned(),
-                        })
-                        .collect();
-                    Some(paths.len())
-                });
+        for _ in 0..thread::available_parallelism().map_or(4, |n| n.get()) {
+            let (projects, next_project) = (projects.clone(), next_project.clone());
+            let mut cache2 = cache2.clone();
 
-                if let Some(count) = count {
-                    vcs_info.uncommitted_changes = Some(count);
-                    cache2.add_vcs_info(&p.path, vcs_info);
+            thread::spawn(move || {
+                while let Some(p) = projects.get(next_project.fetch_add(1, Ordering::Relaxed)) {
+                    if let Some(mut vcs_info) = cache2.get_vcs_info(&p.path) {
+                        let count = gix::open(&p.path).ok().and_then(|repo| {
+                            let index = repo.index_or_empty().ok()?;
+                            let changes = repo
+                                .status(gix::progress::Discard)
+                                .ok()?
+                                .into_iter(Vec::new())
+                                .ok()?;
+
+                            // // NOTE: to count paths like `git status` would, we count a file
+                            // with both staged and unstaged changes **once**, and we also collapse
+                            // untracked files into their topmost untracked directory
+                            let paths: HashSet<_> = changes
+                                .filter_map(Result::ok)
+                                .map(|change| match change {
+                                    IndexWorktree(DirectoryContents { entry, .. }) => {
+                                        let path = entry.rela_path;
+                                        let dir_end = path.find_iter("/").find(|&i| {
+                                            index.prefixed_entries(path[..=i].as_bstr()).is_none()
+                                        });
+                                        match dir_end {
+                                            Some(i) => path[..i].into(),
+                                            None => path,
+                                        }
+                                    }
+                                    change => change.location().to_owned(),
+                                })
+                                .collect();
+                            Some(paths.len())
+                        });
+
+                        if let Some(count) = count {
+                            vcs_info.uncommitted_changes = Some(count);
+                            cache2.add_vcs_info(&p.path, vcs_info);
+                        }
+                    }
                 }
-            }
+            });
         }
     });
 
