@@ -9,10 +9,12 @@ use crossterm::{
     style::{Color, Print, SetBackgroundColor, SetForegroundColor},
     terminal,
 };
-use git2::{Repository, StatusOptions};
+use gix::bstr::ByteSlice;
+use gix::status::{index_worktree::Item::DirectoryContents, Item::IndexWorktree};
 use nucleo_matcher::pattern::{CaseMatching, Normalization, Pattern};
 use nucleo_matcher::{Matcher, Utf32Str};
 use std::cmp::Reverse;
+use std::collections::HashSet;
 use std::io::{stderr, BufWriter, Write};
 use std::path::PathBuf;
 use std::thread;
@@ -277,15 +279,37 @@ pub fn run(config: &Config) -> Result<(), CommandError> {
 
         for p in cache2.get_projects() {
             if let Some(mut vcs_info) = cache2.get_vcs_info(&p.path) {
-                let count = Repository::open(&p.path).and_then(|repo| {
-                    repo.statuses(Some(
-                        StatusOptions::new()
-                            .include_ignored(false)
-                            .include_untracked(true),
-                    ))
-                    .map(|statuses| statuses.len())
+                let count = gix::open(&p.path).ok().and_then(|repo| {
+                    let index = repo.index_or_empty().ok()?;
+                    let changes = repo
+                        .status(gix::progress::Discard)
+                        .ok()?
+                        .into_iter(Vec::new())
+                        .ok()?;
+
+                    // // NOTE: to count paths like `git status` would, we count a file with
+                    // both staged and unstaged changes **once**, and we also collapse untracked
+                    // files into their topmost untracked directory
+                    let paths: HashSet<_> = changes
+                        .filter_map(Result::ok)
+                        .map(|change| match change {
+                            IndexWorktree(DirectoryContents { entry, .. }) => {
+                                let path = entry.rela_path;
+                                let dir_end = path.find_iter("/").find(|&i| {
+                                    index.prefixed_entries(path[..=i].as_bstr()).is_none()
+                                });
+                                match dir_end {
+                                    Some(i) => path[..i].into(),
+                                    None => path,
+                                }
+                            }
+                            change => change.location().to_owned(),
+                        })
+                        .collect();
+                    Some(paths.len())
                 });
-                if let Ok(count) = count {
+
+                if let Some(count) = count {
                     vcs_info.uncommitted_changes = Some(count);
                     cache2.add_vcs_info(&p.path, vcs_info);
                 }
